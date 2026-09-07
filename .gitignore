@@ -1,6 +1,20 @@
+# Terraform
 .terraform/
 *.tfstate
 *.tfstate.backup
+*.tfstate.*.backup
 .terraform.lock.hcl
+crash.log
+*.tfvars
+
+# Lambda layers y builds (generados, no código fuente)
 *.zip
+lambdas/layers/*/python/
+
+# Python
+__pycache__/
+*.pyc
+
+# Otros
 output.json
+Thumbs.db
