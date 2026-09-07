@@ -51,17 +51,26 @@ resource "aws_iam_role_policy" "s3_read" {
 
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_file = "../lambdas/lambda_function.py"
+  source_file = "../lambdas/ingest/handler.py"
   output_path = "lambda_function.zip"
 }
 
 resource "aws_lambda_function" "s3_trigger" {
   function_name    = "rag-s3-trigger-tf"
   runtime          = "python3.12"
-  handler          = "lambda_function.handler"
+  handler          = "handler.handler"
   role             = aws_iam_role.lambda_role.arn
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  layers           = [aws_lambda_layer_version.pypdf.arn]
+  timeout          = 60
+  memory_size      = 512
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE = aws_dynamodb_table.chunks.name
+    }
+  }
 }
 
 resource "aws_lambda_permission" "allow_s3" {
@@ -76,7 +85,7 @@ resource "aws_s3_bucket_notification" "trigger" {
   bucket = aws_s3_bucket.docs.id
   lambda_function {
     lambda_function_arn = aws_lambda_function.s3_trigger.arn
-    events               = ["s3:ObjectCreated:*"]
+    events              = ["s3:ObjectCreated:*"]
   }
   depends_on = [aws_lambda_permission.allow_s3]
 }
