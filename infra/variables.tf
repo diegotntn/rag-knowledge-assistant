@@ -3,3 +3,9 @@ variable "huggingface_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "groq_api_key" {
+  description = "API key de Groq para el LLM"
+  type        = string
+  sensitive   = true
+}
