@@ -34,3 +34,29 @@ resource "aws_lambda_function_event_invoke_config" "s3_trigger_retry" {
     }
   }
 }
+
+resource "aws_iam_role_policy" "s3_write_index" {
+  name = "s3-write-faiss-index"
+  role = aws_iam_role.lambda_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:PutObject", "s3:GetObject"]
+      Resource = "${aws_s3_bucket.docs.arn}/indexes/*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "dynamodb_query" {
+  name = "dynamodb-query-tenant-chunks"
+  role = aws_iam_role.lambda_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["dynamodb:Query"]
+      Resource = aws_dynamodb_table.chunks.arn
+    }]
+  })
+}

@@ -62,14 +62,17 @@ resource "aws_lambda_function" "s3_trigger" {
   role             = aws_iam_role.lambda_role.arn
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
-  layers           = [aws_lambda_layer_version.pypdf.arn]
-  timeout          = 60
-  memory_size      = 512
+  layers = [
+    aws_lambda_layer_version.pypdf.arn,
+    aws_lambda_layer_version.faiss.arn,
+  ]
+  timeout     = 60
+  memory_size = 512
 
   environment {
     variables = {
-      DYNAMODB_TABLE = aws_dynamodb_table.chunks.name
-      HUGGINGFACE_API_KEY  = var.huggingface_api_key
+      DYNAMODB_TABLE      = aws_dynamodb_table.chunks.name
+      HUGGINGFACE_API_KEY = var.huggingface_api_key
     }
   }
 }
