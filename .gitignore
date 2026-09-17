@@ -15,6 +15,14 @@ lambdas/layers/*/python/
 __pycache__/
 *.pyc
 
-# Otros
+# Pruebas locales de invocación (Lambda)
+body.json
+event.json
+out.json
 output.json
+
+# Documentos de prueba (pueden tener datos reales)
+*.pdf
+
+# Otros
 Thumbs.db
