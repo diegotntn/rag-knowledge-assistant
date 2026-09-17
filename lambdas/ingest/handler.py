@@ -1,8 +1,13 @@
 import boto3
 import os
 import re
+import json
+import urllib.request
+import urllib.error
+from decimal import Decimal
 from pypdf import PdfReader
 from io import BytesIO
+
 
 s3 = boto3.client("s3")
 dynamodb = boto3.resource("dynamodb")
@@ -36,6 +41,29 @@ def extract_text_from_pdf(pdf_bytes):
         raise ValueError("No se pudo extraer texto (¿PDF escaneado sin OCR?)")
     return full_text
 
+EMBEDDING_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction"
+
+def get_embedding(text):
+    api_key = os.environ["HUGGINGFACE_API_KEY"]
+    payload = json.dumps({"inputs": text}).encode("utf-8")
+
+    req = urllib.request.Request(
+        EMBEDDING_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        raise ValueError(f"Error de la API de embeddings ({e.code}): {error_body}")
+
 
 def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     words = re.split(r"\s+", text.strip())
@@ -55,6 +83,9 @@ def save_chunks(tenant_id, doc_id, chunks, s3_path):
     table = get_table()
     with table.batch_writer() as batch:
         for i, chunk_val in enumerate(chunks):
+            embedding = get_embedding(chunk_val)
+            embedding_decimal = [Decimal(str(v)) for v in embedding]
+
             batch.put_item(Item={
                 "tenant_id": tenant_id,
                 "chunk_pk": f"{doc_id}#{i:04d}",
@@ -62,6 +93,7 @@ def save_chunks(tenant_id, doc_id, chunks, s3_path):
                 "chunk_id": i,
                 "texto": chunk_val,
                 "s3_path": s3_path,
+                "embedding": embedding_decimal,
             })
 
 
