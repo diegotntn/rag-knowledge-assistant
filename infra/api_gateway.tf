@@ -1,6 +1,12 @@
 resource "aws_apigatewayv2_api" "rag_api" {
   name          = "rag-api"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["POST", "OPTIONS"]
+    allow_headers = ["Content-Type", "Authorization"]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "query" {
