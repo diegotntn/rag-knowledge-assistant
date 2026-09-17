@@ -124,14 +124,21 @@ def ask_groq(prompt):
 
 def handler(event, context):
     try:
+        claims = event["requestContext"]["authorizer"]["jwt"]["claims"]
+        tenant_id = claims.get("custom:tenant_id")
+
         body = json.loads(event.get("body") or "{}")
-        tenant_id = body.get("tenant_id")
         query_text = body.get("query")
 
-        if not tenant_id or not query_text:
+        if not tenant_id:
+            return {
+                "statusCode": 403,
+                "body": json.dumps({"error": "El token no tiene tenant_id asignado"}),
+            }
+        if not query_text:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "Faltan 'tenant_id' o 'query' en el body"}),
+                "body": json.dumps({"error": "Falta 'query' en el body"}),
             }
 
         chunks = search(tenant_id, query_text, top_n=3)

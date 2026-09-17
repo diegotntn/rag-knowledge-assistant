@@ -14,6 +14,9 @@ resource "aws_apigatewayv2_route" "query" {
   api_id    = aws_apigatewayv2_api.rag_api.id
   route_key = "POST /query"
   target    = "integrations/${aws_apigatewayv2_integration.query.id}"
+  authorization_type = "JWT"
+  authorizer_id       = aws_apigatewayv2_authorizer.cognito.id
+
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -32,4 +35,16 @@ resource "aws_lambda_permission" "allow_apigw" {
 
 output "api_url" {
   value = aws_apigatewayv2_stage.default.invoke_url
+}
+
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  api_id           = aws_apigatewayv2_api.rag_api.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "cognito-authorizer"
+
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.client.id]
+    issuer   = "https://cognito-idp.us-east-1.amazonaws.com/${aws_cognito_user_pool.users.id}"
+  }
 }
