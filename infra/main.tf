@@ -90,6 +90,7 @@ resource "aws_s3_bucket_notification" "trigger" {
   lambda_function {
     lambda_function_arn = aws_lambda_function.s3_trigger.arn
     events              = ["s3:ObjectCreated:*"]
+    filter_suffix       = ".pdf"
   }
   depends_on = [aws_lambda_permission.allow_s3]
 }

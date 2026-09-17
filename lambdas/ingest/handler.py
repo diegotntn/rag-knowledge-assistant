@@ -7,6 +7,10 @@ import urllib.error
 from decimal import Decimal
 from pypdf import PdfReader
 from io import BytesIO
+import faiss
+import numpy as np
+import pickle
+import tempfile
 
 
 s3 = boto3.client("s3")
@@ -95,7 +99,77 @@ def save_chunks(tenant_id, doc_id, chunks, s3_path):
                 "s3_path": s3_path,
                 "embedding": embedding_decimal,
             })
+            
+            
+def get_all_tenant_chunks(tenant_id):
+    table = get_table()
+    response = table.query(
+        KeyConditionExpression="tenant_id = :tid",
+        ExpressionAttributeValues={":tid": tenant_id},
+    )
+    items = response["Items"]
 
+    # DynamoDB pagina resultados grandes, hay que seguir pidiendo hasta agotarlos
+    while "LastEvaluatedKey" in response:
+        response = table.query(
+            KeyConditionExpression="tenant_id = :tid",
+            ExpressionAttributeValues={":tid": tenant_id},
+            ExclusiveStartKey=response["LastEvaluatedKey"],
+        )
+        items.extend(response["Items"])
+
+    return items
+
+def build_and_upload_index(tenant_id, bucket):
+    chunks = get_all_tenant_chunks(tenant_id)
+
+    if not chunks:
+        print(f"Sin chunks para tenant={tenant_id}, no se construye índice")
+        return
+
+    valid_chunks = [item for item in chunks if "embedding" in item]
+    skipped = len(chunks) - len(valid_chunks)
+    if skipped:
+        print(f"Aviso: {skipped} chunks sin embedding, se omiten del índice")
+
+    if not valid_chunks:
+        print(f"Sin chunks con embedding para tenant={tenant_id}, no se construye índice")
+        return
+
+    vectors = np.array(
+        [[float(v) for v in item["embedding"]] for item in valid_chunks],
+        dtype="float32",
+    )
+
+    metadata = [
+        {
+            "chunk_pk": item["chunk_pk"],
+            "doc_id": item["doc_id"],
+            "texto": item["texto"],
+            "s3_path": item["s3_path"],
+        }
+        for item in valid_chunks
+    ]
+
+    dimension = vectors.shape[1]
+    index = faiss.IndexFlatL2(dimension)
+    index.add(vectors)
+
+    # FAISS solo sabe escribir a un archivo en disco, no directo a S3
+    with tempfile.NamedTemporaryFile(suffix=".index") as tmp_index:
+        faiss.write_index(index, tmp_index.name)
+        tmp_index.seek(0)
+        s3.upload_file(tmp_index.name, bucket, f"indexes/{tenant_id}/index.faiss")
+
+    # la metadata la guardamos aparte, como pickle
+    metadata_bytes = pickle.dumps(metadata)
+    s3.put_object(
+        Bucket=bucket,
+        Key=f"indexes/{tenant_id}/metadata.pkl",
+        Body=metadata_bytes,
+    )
+
+    print(f"Índice actualizado: {len(chunks)} chunks para tenant={tenant_id}")
 
 def handler(event, context):
     for record in event["Records"]:
@@ -117,6 +191,7 @@ def handler(event, context):
             text = extract_text_from_pdf(pdf_bytes)
             chunks = chunk_text(text)
             save_chunks(tenant_id, doc_id, chunks, s3_path)
+            build_and_upload_index(tenant_id, bucket)
 
             print(f"OK: {len(chunks)} chunks guardados para doc_id={doc_id}, tenant={tenant_id}")
 
