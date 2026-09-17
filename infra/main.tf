@@ -69,6 +69,7 @@ resource "aws_lambda_function" "s3_trigger" {
   environment {
     variables = {
       DYNAMODB_TABLE = aws_dynamodb_table.chunks.name
+      HUGGINGFACE_API_KEY  = var.huggingface_api_key
     }
   }
 }
